@@ -22,6 +22,7 @@ from main_llm_result import main_llm_result
 from search_docu import search_docu
 from Retriever_pdf_txt import retrieve_docu_qa
 from Retriever_url import retrieve_url_qa
+from pandas_agent import pandas_agent_module
 
 
 from dotenv import load_dotenv
@@ -67,6 +68,7 @@ async def embedding_pdf_path(file,file_name):
     db = FAISS.from_documents(st.session_state.pdf_path, HuggingFaceEmbeddings())
     st.session_state.docu_path_df = db
     st.session_state.doc_yn = True
+
     return db
 
 async def main():
@@ -99,6 +101,13 @@ async def main():
             )
 
         url_input = st.sidebar.text_input("URL")
+        Search_with_source =False
+        if len(url_input)>0:
+            switch_state = st.toggle("Search with source")
+            if switch_state:
+                Search_with_source =True
+            else:
+                Search_with_source =False
 
         df_dict = {}
         temp_docu_lt = []
@@ -107,6 +116,7 @@ async def main():
         if len(uploaded_files) >=1:
             st.session_state.file_yn = True
             for file in uploaded_files:
+                # print(file.type)
                 file_name = re.sub(r'\W+', '_', file.name)
                 if 'csv' in file.type:
                     file_name = file_name +'_df'
@@ -127,6 +137,7 @@ async def main():
                         st.session_state.docu_name.append(file_name)
                         st.session_state.docu_display.append(file_document)
                         embedd_db_result = asyncio.create_task(embedding_pdf_path(file,file_name))
+                        # print('1',(temp_docu_lt))
                 
         else:
             st.session_state.df_yn = False
@@ -135,24 +146,26 @@ async def main():
 
     temp_docu_lt = list(set(temp_docu_lt))
     st.session_state.docu_name = list(set(st.session_state.docu_name) & set(temp_docu_lt))
-    df = pd.DataFrame(st.session_state.docu_name + list(df_dict.keys()), columns=['File stored'])
-
+    df = pd.DataFrame(st.session_state.docu_name , columns=['File stored'])
     st.sidebar.dataframe(df,hide_index=True,width=500)
 
+
+    df_options = st.sidebar.multiselect(
+                                    'DataFrame',
+                                    df_dict)
+    
     llm_model, temperature_levels = model_seletion(openai_api_base_value, openai_api_version_value,deployment_name_value, 
                                                    openai_api_key_value, openai_api_type_value,temperature_levels)
     #======================================================================================================
 
-    if st.session_state.doc_yn:
+    if st.session_state.file_yn:
         with tabs[1]:
             if len(df_dict)>0:
                 for df_key,df_value in df_dict.items():
-                    print(df_key)
                     st.dataframe(df_value)
             if len(st.session_state.docu_name)>0:
                 for file in st.session_state.docu_display:
                     display_docu_step_2(file)
-
 
     user_input = st.chat_input("Say something")
     with tabs[0]:
@@ -167,7 +180,17 @@ async def main():
         message('Hello! How can I assist you today?', is_user=False)   
 
         if user_input:
-            retriever_summary = ''
+            retriever_summary = None
+            df_summary = None
+            URL_summary = None
+
+            if len(df_options)>0:
+                try:
+                    df_llm_input = pandas_agent_module(llm_model,user_input,lang_mode, df_options, df_dict)
+                    df_summary = df_llm_input.pandas_agent_job()
+                except Exception as e: 
+                    print('error:', str(e))
+
             if st.session_state.doc_yn:
                 try:
                     user_query_check = search_docu(llm_model,user_input, st.session_state.docu_name, st.session_state.docu_path_df)
@@ -177,10 +200,16 @@ async def main():
                 except Exception as e: 
                     print('error:', str(e))
             
-            if len(retriever_summary)>0:
-                output = retriever_summary
-            elif len(url_input)>0:
-                output = retrieve_url_qa(llm_model,lang_mode,bot_rule,url_input,user_input).retriever_url()
+            if len(url_input)>0:
+                if Search_with_source:
+                    URL_summary = retrieve_url_qa(llm_model,lang_mode,bot_rule,url_input,user_input).retriever_url()
+
+            answer_lt = [retriever_summary,df_summary,URL_summary]
+            answer_lt = [i for i in answer_lt if i is not None]
+
+            if len(answer_lt)>0:
+                print('answer_lt[0]',answer_lt)
+                output = answer_lt[0]
             else:
                 output = main_llm_result(llm_model,lang_mode,bot_rule, prompt_mode,customized_prompt_input,
                                         user_input, st.session_state.history, df_dict)
