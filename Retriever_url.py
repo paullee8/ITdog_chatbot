@@ -1,4 +1,5 @@
 from langchain_community.vectorstores import Chroma
+# from langchain_community.document_loaders.recursive_url_loader import RecursiveUrlLoader
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.runnables import RunnablePassthrough
@@ -47,4 +48,5 @@ class retrieve_url_qa():
             | StrOutputParser()
         )
         self.llm_answer = self.url_retrieval_chain.invoke({'user_question':self.user_input, 'lang':self.lang_mode})
+        # print(self.llm_answer)
         return self.llm_answer

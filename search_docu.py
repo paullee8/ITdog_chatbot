@@ -28,7 +28,7 @@ class search_docu():
         return(self.llm_answer)
     def calculate_similarity(self):
         self.docu_name = self.find_docu_name()
-        self.results_with_scores = self.docu_path_df.similarity_search_with_score(self.docu_name) 
+        self.results_with_scores = self.docu_path_df.similarity_search_with_score(self.docu_name)
         for self.doc ,self.score in self.results_with_scores:
             if self.score<=1:
                 self.answer = [self.doc.metadata,self.score]
